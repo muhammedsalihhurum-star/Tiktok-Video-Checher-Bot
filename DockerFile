@@ -1,0 +1,19 @@
+# Python 3.10 tabanlı hafif bir sürüm kullan
+FROM python:3.10-slim
+
+# FFmpeg'i sisteme kur (Burası kritik)
+RUN apt-get update && \
+    apt-get install -y ffmpeg && \
+    apt-get clean
+
+# Çalışma klasörünü ayarla
+WORKDIR /app
+
+# Dosyaları kopyala
+COPY . .
+
+# Kütüphaneleri kur
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Botu başlat
+CMD ["python", "bot.py"]
