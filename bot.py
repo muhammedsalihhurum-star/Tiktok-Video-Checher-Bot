@@ -127,28 +127,6 @@ def get_msg(chat_id, key):
 
 # --- YARDIMCI FONKSİYONLAR ---
 
-def check_subscription(user_id):
-    """Kullanıcının kanala üye olup olmadığını kontrol eder."""
-    try:
-        member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
-        if member.status in ['creator', 'administrator', 'member']:
-            return True
-        return False
-    except:
-        return False
-
-def send_subscription_warning(chat_id):
-    """SEÇİLEN DİLDE uyarı mesajı gönderir."""
-    # Buton metinleri seçilen dile göre gelir
-    btn_join_text = get_msg(chat_id, "btn_join")
-    btn_check_text = get_msg(chat_id, "btn_check")
-    warning_text = get_msg(chat_id, "sub_warning_text")
-
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton(btn_join_text, url=f"https://t.me/{CHANNEL_USERNAME.replace('@', '')}"))
-    markup.add(InlineKeyboardButton(btn_check_text, callback_data="check_sub"))
-    
-    bot.send_message(chat_id, warning_text, reply_markup=markup, parse_mode='Markdown')
 
 def create_stat_bar(value, max_value=1000000, length=8):
     percent = min(1.0, value / max_value)
