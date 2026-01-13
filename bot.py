@@ -127,6 +127,28 @@ def get_msg(chat_id, key):
 
 # --- YARDIMCI FONKSİYONLAR ---
 
+def check_subscription(user_id):
+    """Kullanıcının kanala üye olup olmadığını kontrol eder."""
+    try:
+        member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        if member.status in ['creator', 'administrator', 'member']:
+            return True
+        return False
+    except:
+        return False
+
+def send_subscription_warning(chat_id):
+    """SEÇİLEN DİLDE uyarı mesajı gönderir."""
+    # Buton metinleri seçilen dile göre gelir
+    btn_join_text = get_msg(chat_id, "btn_join")
+    btn_check_text = get_msg(chat_id, "btn_check")
+    warning_text = get_msg(chat_id, "sub_warning_text")
+
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton(btn_join_text, url=f"https://t.me/{CHANNEL_USERNAME.replace('@', '')}"))
+    markup.add(InlineKeyboardButton(btn_check_text, callback_data="check_sub"))
+    
+    bot.send_message(chat_id, warning_text, reply_markup=markup, parse_mode='Markdown')
 
 def create_stat_bar(value, max_value=1000000, length=8):
     percent = min(1.0, value / max_value)
@@ -247,31 +269,26 @@ def callback_check_sub(call):
 def analyze_video(message):
     cid = message.chat.id
     
-    # Varsayılan dil TR (eğer seçmediyse)
+    # 1. Varsayılan dil ayarı (Burası kalsın)
     if cid not in user_prefs:
-        user_prefs[cid] = "EN"
-
-    # Link attığında da KONTROL ŞART
-    if not check_subscription(message.from_user.id):
-        send_subscription_warning(cid)
-        return
+        user_prefs[cid] = "TR"
 
     url = message.text.strip()
     
-    # --- DÜZELTİLMİŞ KISIM BAŞLANGIÇ ---
-    # Bu satırlar da üsttekilerle aynı hizada (içeride) olmalı
+    # 2. Sadece Link Kontrolü (Abonelik sorgusu SİLİNDİ)
+    # Link yoksa hiçbir şey yapma, dur.
     if "tiktok.com" not in url:
         return 
-    # --- DÜZELTİLMİŞ KISIM BİTİŞ ---
 
-    # (Buradan sonra kodun devamı geliyorsa o da aynı hizada olmalı)
-
+    # --- İndirme İşlemleri Buradan Aynen Devam Ediyor ---
     msg = bot.reply_to(message, get_msg(cid, "analyzing"), parse_mode='Markdown')
 
     try:
         simulate_loading(cid, msg.message_id)
+        # TIKWM API isteği
         response = requests.post(TIKWM_API_URL, data={"url": url, "hd": 1}, headers={"User-Agent": "Mozilla/5.0"}).json()
         
+        # --- (Buradan sonraki kodların aynen kalacak, dokunmana gerek yok) ---
         if response.get("code") == 0:
             data = response.get("data", {})
             browser_url = data.get("play")  
@@ -298,8 +315,8 @@ def analyze_video(message):
                 f"{get_msg(cid, 'desc_header')}\n_“{title}”_\n\n"
                 f"{get_msg(cid, 'id_region_header')}\n├ 🔢 ID: `{video_id}`\n├ 🌍 {get_msg(cid, 'region')}: `{region}`\n└ 📅 {get_msg(cid, 'date')}: `{creation_date}`\n\n"
                 f"{get_msg(cid, 'stats_header')}\n`👁 {format_number(views):<6}` {view_bar}\n`♥ {format_number(likes):<6}` {like_bar}\n\n"
-                f"{get_msg(cid, 'web_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(browser_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(browser_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}   : `{safe(browser_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}  : `{size(browser_meta)}`\n\n"
-                f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}   : `{safe(mobile_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}  : `{size(mobile_meta)}`\n\n"
+                f"{get_msg(cid, 'web_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(browser_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(browser_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}    : `{safe(browser_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(browser_meta)}`\n\n"
+                f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}    : `{safe(mobile_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
                 f"{get_msg(cid, 'publisher')} `@{data.get('author', {}).get('unique_id')}`"
             )
             
@@ -335,7 +352,6 @@ print("Bot aktif...")
 keep_alive()  # Flask sunucusunu başlat
 
 bot.infinity_polling() # Botu başlat
-
 
 
 
