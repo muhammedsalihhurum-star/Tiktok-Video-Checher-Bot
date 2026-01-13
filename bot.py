@@ -271,7 +271,7 @@ def analyze_video(message):
     
     # Varsayılan dil TR (eğer seçmediyse)
     if cid not in user_prefs:
-        user_prefs[cid] = "TR"
+        user_prefs[cid] = "EN"
 
     # Link attığında da KONTROL ŞART
     if not check_subscription(message.from_user.id):
@@ -283,9 +283,6 @@ def analyze_video(message):
     # --- DÜZELTİLMİŞ KISIM BAŞLANGIÇ ---
     # Bu satırlar da üsttekilerle aynı hizada (içeride) olmalı
     if "tiktok.com" not in url:
-        # Sadece özel mesajsa (private) uyarı ver, grupsa sessiz kal
-        if message.chat.type == 'private':
-            bot.send_message(cid, get_msg(cid, "link_warning"))
         return 
     # --- DÜZELTİLMİŞ KISIM BİTİŞ ---
 
@@ -360,6 +357,7 @@ print("Bot aktif...")
 keep_alive()  # Flask sunucusunu başlat
 
 bot.infinity_polling() # Botu başlat
+
 
 
 
