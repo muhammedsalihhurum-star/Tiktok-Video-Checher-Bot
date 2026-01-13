@@ -10,7 +10,7 @@ from threading import Thread
 import os
 
 # SENİN TOKENIN
-BOT_TOKEN = '8584063240:AAHv-2ChsMxXk6cOdTZiB1arHnqbPIP7HrY'
+BOT_TOKEN = '8584063240:AAFlpws7pLka-2dsxxahU7NSDJGJ2cdBGbU'
 bot = telebot.TeleBot(BOT_TOKEN)
 
 TIKWM_API_URL = "https://tikwm.com/api/"
@@ -352,4 +352,5 @@ def keep_alive():
 # --- ÇALIŞTIRMA ---
 print("Bot aktif...")
 keep_alive()  # Flask sunucusunu başlat
+
 bot.infinity_polling() # Botu başlat
