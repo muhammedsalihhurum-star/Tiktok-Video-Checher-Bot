@@ -282,7 +282,7 @@ def analyze_video(message):
     
     # EĞER TİKTOK LİNKİ DEĞİLSE UYARI VER VE DUR
     # EĞER TİKTOK LİNKİ DEĞİLSE UYARI VER VE DUR
-    if "tiktok.com" not in url:
+if "tiktok.com" not in url:
     # Sadece özel mesajsa (private) uyarı ver, grupsa sessiz kal
     if message.chat.type == 'private':
         bot.send_message(cid, get_msg(cid, "link_warning"))
@@ -357,4 +357,5 @@ print("Bot aktif...")
 keep_alive()  # Flask sunucusunu başlat
 
 bot.infinity_polling() # Botu başlat
+
 
