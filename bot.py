@@ -305,6 +305,8 @@ def analyze_video(message):
 
             views = data.get("play_count", 0)
             likes = data.get("digg_count", 0)
+            comments = data.get("comment_count", 0) 
+            shares = data.get("share_count", 0)
             if views > 0:
                 eng_rate = ((likes + comments + shares) / views) * 100
             else:
@@ -366,6 +368,7 @@ print("Bot aktif...")
 keep_alive()  # Flask sunucusunu başlat
 
 bot.infinity_polling() # Botu başlat
+
 
 
 
