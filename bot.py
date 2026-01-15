@@ -22,6 +22,8 @@ user_prefs = {}
 LANGUAGES = {
     "TR": {
         "welcome": "Lütfen bir dil seçin / Please select a language:",
+        "engagement": "Etkileşim Oranı",
+        "bot_warning": "🚨 **ŞÜPHELİ ETKİLEŞİM:** Like sayısı izlenmeden fazla! (Olası Bot)",
         "lang_set": "✅ Dil Türkçe olarak ayarlandı! TikTok linki gönder.",
         "analyzing": "🚀 **Analiz Başlatılıyor...**",
         "loading_1": "Sunucuya bağlanılıyor...",
@@ -57,7 +59,9 @@ LANGUAGES = {
         "welcome": "Please select a language:",
         "lang_set": "✅ Language set to English! Send a TikTok link.",
         "analyzing": "🚀 **Starting Analysis...**",
+        "bot_warning": "🚨 **SUSPICIOUS:** Likes > Views! (Possible Bot)",
         "loading_1": "Connecting to server...",
+        "engagement": "Engagement Rate",
         "loading_2": "Fetching ID and Region data...",
         "loading_3": "Performing technical analysis...",
         "loading_4": "Dashboard created!",
@@ -88,12 +92,14 @@ LANGUAGES = {
     },
     "RU": {
         "welcome": "Пожалуйста, выберите язык:",
+        "engagement": "Уровень вовлеченности",
         "lang_set": "✅ Язык установлен на Русский! Отправьте ссылку TikTok.",
         "analyzing": "🚀 **Начинается анализ...**",
         "loading_1": "Подключение к серверу...",
         "loading_2": "Получение данных ID и региона...",
         "loading_3": "Технический анализ...",
         "loading_4": "Дашборд создан!",
+        "bot_warning": "🚨 **ПОДОЗРИТЕЛЬНО:** Лайков > Просмотров! (Возможно бот)",
         "desc_header": "📝 **Описание видео**",
         "no_desc": "Нет описания.",
         "id_region_header": "🆔 **ID и Регион**",
@@ -299,9 +305,15 @@ def analyze_video(message):
 
             views = data.get("play_count", 0)
             likes = data.get("digg_count", 0)
+            if views > 0:
+                eng_rate = ((likes + comments + shares) / views) * 100
+            else:
+                eng_rate = 0
             view_bar = create_stat_bar(views, 100000)
             like_bar = create_stat_bar(likes, 50000)
-
+            bot_alert = ""
+            if likes > views:
+                bot_alert = f"\n\n{get_msg(cid, 'bot_warning')}"
             def safe(meta, key): return meta.get(key, "?") if meta else "?"
             def size(meta): return format_size(meta.get("size_bytes", 0)) if meta else "?"
 
@@ -315,6 +327,8 @@ def analyze_video(message):
                 f"{get_msg(cid, 'desc_header')}\n_“{title}”_\n\n"
                 f"{get_msg(cid, 'id_region_header')}\n├ 🔢 ID: `{video_id}`\n├ 🌍 {get_msg(cid, 'region')}: `{region}`\n└ 📅 {get_msg(cid, 'date')}: `{creation_date}`\n\n"
                 f"{get_msg(cid, 'stats_header')}\n`👁 {format_number(views):<6}` {view_bar}\n`♥ {format_number(likes):<6}` {like_bar}\n\n"
+                f"📈 {get_msg(cid, 'engagement')}: `%{eng_rate:.2f}`"
+                f"{bot_alert}\n\n"
                 f"{get_msg(cid, 'web_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(browser_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(browser_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}    : `{safe(browser_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(browser_meta)}`\n\n"
                 f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}    : `{safe(mobile_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
                 f"{get_msg(cid, 'publisher')} `@{data.get('author', {}).get('unique_id')}`"
