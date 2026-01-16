@@ -1,20 +1,72 @@
+from flask import Flask, request, jsonify
+import requests
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-import requests
 import datetime
 import ffmpeg
 import time
 import sys
-from flask import Flask
 from threading import Thread
 import os
 
-# SENİN TOKENIN
+# --- 1. FLASK UYGULAMASINI EN BAŞTA BAŞLATIYORUZ ---
+app = Flask('')
+
+# --- 2. MOBİL UYGULAMA İÇİN API ---
+@app.route('/api/analyze')
+def api_analyze():
+    url = request.args.get('url')
+    
+    if not url:
+        return jsonify({"success": False, "message": "URL yok"})
+
+    try:
+        # TIKWM'den veriyi çek
+        # User-Agent ekledik ki TikWM bizi bot sanıp engellemesin
+        response = requests.post("https://tikwm.com/api/", data={"url": url, "hd": 1}, headers={"User-Agent": "Mozilla/5.0"}).json()
+        
+        if response.get("code") == 0:
+            data = response.get("data", {})
+            
+            # Mobil uygulamanın beklediği JSON formatı
+            api_response = {
+                "success": True,
+                "data": {
+                    "id": data.get("id"),
+                    "region": data.get("region", "Global").upper(),
+                    "title": data.get("title", ""),
+                    "cover": data.get("cover"),
+                    "play": data.get("play"),       # Video Linki
+                    "hdplay": data.get("hdplay"),   # HD Link
+                    "music": data.get("music"),     # Müzik Linki
+                    "author": {
+                        "nickname": data.get("author", {}).get("nickname"),
+                        "unique_id": data.get("author", {}).get("unique_id"),
+                        "avatar": data.get("author", {}).get("avatar")
+                    },
+                    "play_count": data.get("play_count", 0),
+                    "digg_count": data.get("digg_count", 0),
+                    "comment_count": data.get("comment_count", 0),
+                    "share_count": data.get("share_count", 0),
+                    "create_time": data.get("create_time"),
+                    "size": data.get("size", 0),
+                    "resolution": data.get("video_resolution", "HD"), 
+                    "fps": 30 
+                }
+            }
+            return jsonify(api_response)
+        else:
+             return jsonify({"success": False, "message": "TikWM veriyi bulamadı"})
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+# --- 3. TELEGRAM BOT AYARLARI ---
 BOT_TOKEN = '8584063240:AAGOBsruSQVAFwQxNxYH9WbMgL52MqmeruM'
 bot = telebot.TeleBot(BOT_TOKEN)
 
 TIKWM_API_URL = "https://tikwm.com/api/"
-CHANNEL_USERNAME = "@kuronai60"  # Zorunlu katılınacak kanal
+CHANNEL_USERNAME = "@kuronai60"  
 
 # --- DİL AYARLARI VE SÖZLÜK ---
 user_prefs = {}  
@@ -53,7 +105,7 @@ LANGUAGES = {
         "btn_check": "✅ Kontrol Et",
         "not_joined_alert": "❌ Henüz kanala katılmamışsınız!",
         "thanks": "✅ Teşekkürler! Link gönderebilirsiniz.",
-        "link_warning": "⚠️ Lütfen geçerli bir TikTok bağlantısı gönderin."  # <-- BU SATIRI EKLE
+        "link_warning": "⚠️ Lütfen geçerli bir TikTok bağlantısı gönderin."
     },
     "EN": {
         "welcome": "Please select a language:",
@@ -88,7 +140,7 @@ LANGUAGES = {
         "btn_check": "✅ Check",
         "not_joined_alert": "❌ You have not joined the channel yet!",
         "thanks": "✅ Thank you! You can send a link.",
-        "link_warning": "⚠️ Please send a valid TikTok link."  # <-- BU SATIRI EKLE
+        "link_warning": "⚠️ Please send a valid TikTok link."
     },
     "RU": {
         "welcome": "Пожалуйста, выберите язык:",
@@ -123,7 +175,7 @@ LANGUAGES = {
         "btn_check": "✅ Проверить",
         "not_joined_alert": "❌ Вы еще не присоединились к каналу!",
         "thanks": "✅ Спасибо! Можете отправить ссылку.",
-        "link_warning": "⚠️ Пожалуйста, отправьте действительную ссылку на TikTok."  # <-- BU SATIRI EKLE
+        "link_warning": "⚠️ Пожалуйста, отправьте действительную ссылку на TikTok."
     }
 }
 
@@ -145,7 +197,6 @@ def check_subscription(user_id):
 
 def send_subscription_warning(chat_id):
     """SEÇİLEN DİLDE uyarı mesajı gönderir."""
-    # Buton metinleri seçilen dile göre gelir
     btn_join_text = get_msg(chat_id, "btn_join")
     btn_check_text = get_msg(chat_id, "btn_check")
     warning_text = get_msg(chat_id, "sub_warning_text")
@@ -226,13 +277,11 @@ def get_date_from_id(video_id):
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    # BURADA ABONELİK KONTROLÜ YAPMIYORUZ. ÖNCE DİL SEÇSİN.
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("🇹🇷 Türkçe", callback_data="lang_TR"))
     markup.add(InlineKeyboardButton("🇬🇧 English", callback_data="lang_EN"))
     markup.add(InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_RU"))
     
-    # 3 dilde "Lütfen dil seçin" yazısı (Tek bir mesajda)
     welcome_text = (
         "🇹🇷 Lütfen bir dil seçin:\n"
         "🇬🇧 Please select a language:\n"
@@ -242,32 +291,25 @@ def send_welcome(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("lang_"))
 def callback_language(call):
-    # 1. Dili kaydet
     lang_code = call.data.split("_")[1]
     user_prefs[call.message.chat.id] = lang_code
     
-    # 2. ŞİMDİ Abonelik kontrolü yap
     if check_subscription(call.from_user.id):
-        # Üye ise: Başarı mesajı (Seçilen dilde)
         bot.answer_callback_query(call.id, "✅")
         bot.edit_message_text(LANGUAGES[lang_code]["lang_set"], call.message.chat.id, call.message.message_id)
     else:
-        # Üye değilse: Uyarı mesajı (Sadece seçilen dilde!)
         bot.answer_callback_query(call.id, "⚠️")
-        bot.delete_message(call.message.chat.id, call.message.message_id) # Önceki dil menüsünü sil
-        send_subscription_warning(call.message.chat.id) # Yeni temiz uyarıyı at
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        send_subscription_warning(call.message.chat.id)
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_sub")
 def callback_check_sub(call):
     chat_id = call.message.chat.id
-    # Kontrol Et butonuna bastığında:
     if check_subscription(call.from_user.id):
-        # Artık üye olmuş
         bot.delete_message(chat_id, call.message.message_id)
         bot.answer_callback_query(call.id, "✅", show_alert=False)
         bot.send_message(chat_id, get_msg(chat_id, "thanks"))
     else:
-        # Hala üye değil (Seçilen dilde hata ver)
         alert_text = get_msg(chat_id, "not_joined_alert")
         bot.answer_callback_query(call.id, alert_text, show_alert=True)
 
@@ -275,26 +317,20 @@ def callback_check_sub(call):
 def analyze_video(message):
     cid = message.chat.id
     
-    # 1. Varsayılan dil ayarı (Burası kalsın)
     if cid not in user_prefs:
         user_prefs[cid] = "TR"
 
     url = message.text.strip()
     
-    # 2. Sadece Link Kontrolü (Abonelik sorgusu SİLİNDİ)
-    # Link yoksa hiçbir şey yapma, dur.
     if "tiktok.com" not in url:
         return 
 
-    # --- İndirme İşlemleri Buradan Aynen Devam Ediyor ---
     msg = bot.reply_to(message, get_msg(cid, "analyzing"), parse_mode='Markdown')
 
     try:
         simulate_loading(cid, msg.message_id)
-        # TIKWM API isteği
         response = requests.post(TIKWM_API_URL, data={"url": url, "hd": 1}, headers={"User-Agent": "Mozilla/5.0"}).json()
         
-        # --- (Buradan sonraki kodların aynen kalacak, dokunmana gerek yok) ---
         if response.get("code") == 0:
             data = response.get("data", {})
             browser_url = data.get("play")  
@@ -331,8 +367,8 @@ def analyze_video(message):
                 f"{get_msg(cid, 'stats_header')}\n`👁 {format_number(views):<6}` {view_bar}\n`♥ {format_number(likes):<6}` {like_bar}\n\n"
                 f"📈 {get_msg(cid, 'engagement')}: `%{eng_rate:.2f}`"
                 f"{bot_alert}\n\n"
-                f"{get_msg(cid, 'web_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(browser_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(browser_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}    : `{safe(browser_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(browser_meta)}`\n\n"
-                f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}    : `{safe(mobile_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
+                f"{get_msg(cid, 'web_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(browser_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(browser_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(browser_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(browser_meta)}`\n\n"
+                f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(mobile_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
                 f"{get_msg(cid, 'publisher')} `@{data.get('author', {}).get('unique_id')}`"
             )
             
@@ -349,9 +385,8 @@ def analyze_video(message):
             bot.edit_message_text(get_msg(cid, "err_not_found"), message.chat.id, msg.message_id)
     except Exception as e:
         bot.edit_message_text(f"{get_msg(cid, 'err_general')} {str(e)[:50]}", message.chat.id, msg.message_id)
-# --- FLASK KEEP_ALIVE ---
-app = Flask('')
 
+# --- FLASK KEEP_ALIVE ---
 @app.route('/')
 def home():
     return "Bot Calisiyor! / Bot is Running!"
@@ -368,9 +403,3 @@ print("Bot aktif...")
 keep_alive()  # Flask sunucusunu başlat
 
 bot.infinity_polling() # Botu başlat
-
-
-
-
-
-
