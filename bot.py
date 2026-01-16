@@ -12,7 +12,7 @@ import os
 # --- 1. FLASK UYGULAMASINI EN BAŞTA BAŞLATIYORUZ ---
 app = Flask('')
 
-# --- 2. MOBİL UYGULAMA İÇİN API ---
+# --- 2. MOBİL UYGULAMA İÇİN API (GÜNCELLENMİŞ: TAM ANALİZ) ---
 @app.route('/api/analyze')
 def api_analyze():
     url = request.args.get('url')
@@ -22,13 +22,32 @@ def api_analyze():
 
     try:
         # TIKWM'den veriyi çek
-        # User-Agent ekledik ki TikWM bizi bot sanıp engellemesin
         response = requests.post("https://tikwm.com/api/", data={"url": url, "hd": 1}, headers={"User-Agent": "Mozilla/5.0"}).json()
         
         if response.get("code") == 0:
             data = response.get("data", {})
             
-            # Mobil uygulamanın beklediği JSON formatı
+            # Linkleri al
+            browser_url = data.get("play")      # Kaynak (Web)
+            mobile_url = data.get("hdplay")     # Mobil (HD)
+            
+            # --- KRİTİK NOKTA: FFMPEG ANALİZİ ---
+            # Botun yaptığı analizin aynısını burada yapıyoruz
+            browser_meta = get_video_metadata(browser_url)
+            
+            # Eğer mobil link varsa onu da analiz et, yoksa kaynağı kullan
+            if mobile_url and mobile_url != browser_url:
+                mobile_meta = get_video_metadata(mobile_url)
+            else:
+                mobile_meta = browser_meta
+
+            # Güvenli veri alma fonksiyonu (Hata önleyici)
+            def safe_get(meta, key): 
+                return meta.get(key, "?") if meta else "?"
+            
+            def safe_size(meta):
+                return meta.get("size_bytes", 0) if meta else 0
+
             api_response = {
                 "success": True,
                 "data": {
@@ -36,22 +55,39 @@ def api_analyze():
                     "region": data.get("region", "Global").upper(),
                     "title": data.get("title", ""),
                     "cover": data.get("cover"),
-                    "play": data.get("play"),       # Video Linki
-                    "hdplay": data.get("hdplay"),   # HD Link
-                    "music": data.get("music"),     # Müzik Linki
+                    "music": data.get("music"),
                     "author": {
                         "nickname": data.get("author", {}).get("nickname"),
                         "unique_id": data.get("author", {}).get("unique_id"),
                         "avatar": data.get("author", {}).get("avatar")
                     },
-                    "play_count": data.get("play_count", 0),
-                    "digg_count": data.get("digg_count", 0),
-                    "comment_count": data.get("comment_count", 0),
-                    "share_count": data.get("share_count", 0),
+                    "stats": {
+                        "play": data.get("play_count", 0),
+                        "digg": data.get("digg_count", 0),
+                        "comment": data.get("comment_count", 0),
+                        "share": data.get("share_count", 0)
+                    },
                     "create_time": data.get("create_time"),
-                    "size": data.get("size", 0),
-                    "resolution": data.get("video_resolution", "HD"), 
-                    "fps": 30 
+                    
+                    # KAYNAK (WEB) VERİLERİ
+                    "source_data": {
+                        "url": browser_url,
+                        "quality": safe_get(browser_meta, 'quality'),
+                        "resolution": safe_get(browser_meta, 'res'),
+                        "fps": safe_get(browser_meta, 'fps'),
+                        "size": safe_size(browser_meta),
+                        "bitrate": safe_get(browser_meta, 'bitrate')
+                    },
+                    
+                    # MOBİL (HD) VERİLERİ
+                    "mobile_data": {
+                        "url": mobile_url,
+                        "quality": safe_get(mobile_meta, 'quality'),
+                        "resolution": safe_get(mobile_meta, 'res'),
+                        "fps": safe_get(mobile_meta, 'fps'),
+                        "size": safe_size(mobile_meta),
+                        "bitrate": safe_get(mobile_meta, 'bitrate')
+                    }
                 }
             }
             return jsonify(api_response)
@@ -403,3 +439,4 @@ print("Bot aktif...")
 keep_alive()  # Flask sunucusunu başlat
 
 bot.infinity_polling() # Botu başlat
+
