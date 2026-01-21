@@ -12,7 +12,7 @@ import os
 # --- 1. FLASK UYGULAMASINI EN BAŞTA BAŞLATIYORUZ ---
 app = Flask('')
 
-# --- 2. MOBİL UYGULAMA İÇİN API (GÜNCELLENMİŞ: TAM ANALİZ) ---
+# --- 2. MOBİL UYGULAMA İÇİN API ---
 @app.route('/api/analyze')
 def api_analyze():
     url = request.args.get('url')
@@ -21,32 +21,22 @@ def api_analyze():
         return jsonify({"success": False, "message": "URL yok"})
 
     try:
-        # TIKWM'den veriyi çek
         response = requests.post("https://tikwm.com/api/", data={"url": url, "hd": 1}, headers={"User-Agent": "Mozilla/5.0"}).json()
         
         if response.get("code") == 0:
             data = response.get("data", {})
+            browser_url = data.get("play")      
+            mobile_url = data.get("hdplay")     
             
-            # Linkleri al
-            browser_url = data.get("play")      # Kaynak (Web)
-            mobile_url = data.get("hdplay")     # Mobil (HD)
-            
-            # --- KRİTİK NOKTA: FFMPEG ANALİZİ ---
-            # Botun yaptığı analizin aynısını burada yapıyoruz
             browser_meta = get_video_metadata(browser_url)
             
-            # Eğer mobil link varsa onu da analiz et, yoksa kaynağı kullan
             if mobile_url and mobile_url != browser_url:
                 mobile_meta = get_video_metadata(mobile_url)
             else:
                 mobile_meta = browser_meta
 
-            # Güvenli veri alma fonksiyonu (Hata önleyici)
-            def safe_get(meta, key): 
-                return meta.get(key, "?") if meta else "?"
-            
-            def safe_size(meta):
-                return meta.get("size_bytes", 0) if meta else 0
+            def safe_get(meta, key): return meta.get(key, "?") if meta else "?"
+            def safe_size(meta): return meta.get("size_bytes", 0) if meta else 0
 
             api_response = {
                 "success": True,
@@ -68,8 +58,6 @@ def api_analyze():
                         "share": data.get("share_count", 0)
                     },
                     "create_time": data.get("create_time"),
-                    
-                    # KAYNAK (WEB) VERİLERİ
                     "source_data": {
                         "url": browser_url,
                         "quality": safe_get(browser_meta, 'quality'),
@@ -78,8 +66,6 @@ def api_analyze():
                         "size": safe_size(browser_meta),
                         "bitrate": safe_get(browser_meta, 'bitrate')
                     },
-                    
-                    # MOBİL (HD) VERİLERİ
                     "mobile_data": {
                         "url": mobile_url,
                         "quality": safe_get(mobile_meta, 'quality'),
@@ -114,6 +100,7 @@ LANGUAGES = {
         "bot_warning": "🚨 **ŞÜPHELİ ETKİLEŞİM:** Like sayısı izlenmeden fazla! (Olası Bot)",
         "lang_set": "✅ Dil Türkçe olarak ayarlandı! TikTok linki gönder.",
         "analyzing": "🚀 **Analiz Başlatılıyor...**",
+        "updating": "🔄 **Veriler Güncelleniyor...**", # Yeni
         "loading_1": "Sunucuya bağlanılıyor...",
         "loading_2": "Kimlik ve Bölge verileri alınıyor...",
         "loading_3": "Teknik analiz yapılıyor...",
@@ -132,7 +119,7 @@ LANGUAGES = {
         "file": "Dosya",
         "publisher": "👤 **Yayıncı:**",
         "btn_download": "📥 İndir",
-        "btn_music": "🎵 Müzik",
+        "btn_refresh": "🔄 Güncelle", # Yeni
         "btn_profile": "🔗 Profil",
         "err_not_found": "❌ Video bulunamadı.",
         "err_general": "❌ Hata:",
@@ -147,6 +134,7 @@ LANGUAGES = {
         "welcome": "Please select a language:",
         "lang_set": "✅ Language set to English! Send a TikTok link.",
         "analyzing": "🚀 **Starting Analysis...**",
+        "updating": "🔄 **Updating Data...**", # New
         "bot_warning": "🚨 **SUSPICIOUS:** Likes > Views! (Possible Bot)",
         "loading_1": "Connecting to server...",
         "engagement": "Engagement Rate",
@@ -167,7 +155,7 @@ LANGUAGES = {
         "file": "File",
         "publisher": "👤 **Publisher:**",
         "btn_download": "📥 Download",
-        "btn_music": "🎵 Music",
+        "btn_refresh": "🔄 Refresh", # New
         "btn_profile": "🔗 Profile",
         "err_not_found": "❌ Video not found.",
         "err_general": "❌ Error:",
@@ -183,6 +171,7 @@ LANGUAGES = {
         "engagement": "Уровень вовлеченности",
         "lang_set": "✅ Язык установлен на Русский! Отправьте ссылку TikTok.",
         "analyzing": "🚀 **Начинается анализ...**",
+        "updating": "🔄 **Обновление данных...**", # New
         "loading_1": "Подключение к серверу...",
         "loading_2": "Получение данных ID и региона...",
         "loading_3": "Технический анализ...",
@@ -202,7 +191,7 @@ LANGUAGES = {
         "file": "Файл",
         "publisher": "👤 **Автор:**",
         "btn_download": "📥 Скачать",
-        "btn_music": "🎵 Музыка",
+        "btn_refresh": "🔄 Обновить", # New
         "btn_profile": "🔗 Профиль",
         "err_not_found": "❌ Видео не найдено.",
         "err_general": "❌ Ошибка:",
@@ -222,7 +211,6 @@ def get_msg(chat_id, key):
 # --- YARDIMCI FONKSİYONLAR ---
 
 def check_subscription(user_id):
-    """Kullanıcının kanala üye olup olmadığını kontrol eder."""
     try:
         member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
         if member.status in ['creator', 'administrator', 'member']:
@@ -232,7 +220,6 @@ def check_subscription(user_id):
         return False
 
 def send_subscription_warning(chat_id):
-    """SEÇİLEN DİLDE uyarı mesajı gönderir."""
     btn_join_text = get_msg(chat_id, "btn_join")
     btn_check_text = get_msg(chat_id, "btn_check")
     warning_text = get_msg(chat_id, "sub_warning_text")
@@ -309,6 +296,62 @@ def get_date_from_id(video_id):
     except:
         return "-"
 
+# --- ORTAK MESAJ OLUŞTURUCU (Hem ilk analiz hem de yenileme için) ---
+def prepare_message_content(data, browser_meta, mobile_meta, cid):
+    views = data.get("play_count", 0)
+    likes = data.get("digg_count", 0)
+    comments = data.get("comment_count", 0) 
+    shares = data.get("share_count", 0)
+    
+    if views > 0:
+        eng_rate = ((likes + comments + shares) / views) * 100
+    else:
+        eng_rate = 0
+        
+    view_bar = create_stat_bar(views, 100000)
+    like_bar = create_stat_bar(likes, 50000)
+    
+    bot_alert = ""
+    if likes > views:
+        bot_alert = f"\n\n{get_msg(cid, 'bot_warning')}"
+        
+    def safe(meta, key): return meta.get(key, "?") if meta else "?"
+    def size(meta): return format_size(meta.get("size_bytes", 0)) if meta else "?"
+
+    video_id = data.get("id")
+    creation_date = get_date_from_id(video_id)
+    region = data.get("region", "Global").upper()
+    title = data.get("title", "")
+    if not title: title = get_msg(cid, "no_desc")
+    
+    mobile_url = data.get("hdplay")
+
+    caption = (
+        f"{get_msg(cid, 'desc_header')}\n_“{title}”_\n\n"
+        f"{get_msg(cid, 'id_region_header')}\n├ 🔢 ID: `{video_id}`\n├ 🌍 {get_msg(cid, 'region')}: `{region}`\n└ 📅 {get_msg(cid, 'date')}: `{creation_date}`\n\n"
+        f"{get_msg(cid, 'stats_header')}\n`👁 {format_number(views):<6}` {view_bar}\n`♥ {format_number(likes):<6}` {like_bar}\n\n"
+        f"📈 {get_msg(cid, 'engagement')}: `%{eng_rate:.2f}`"
+        f"{bot_alert}\n\n"
+        f"{get_msg(cid, 'web_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(browser_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(browser_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(browser_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(browser_meta)}`\n\n"
+        f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(mobile_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
+        f"{get_msg(cid, 'publisher')} `@{data.get('author', {}).get('unique_id')}`"
+    )
+    
+    markup = InlineKeyboardMarkup()
+    # İndirme Butonu
+    markup.add(InlineKeyboardButton(f"{get_msg(cid, 'btn_download')} (HD - {size(mobile_meta)})", url=mobile_url))
+    
+    # Müzik Butonu Kaldırıldı -> Yerine Yenileme Butonu Eklendi
+    refresh_callback = f"refresh_{video_id}"
+    profile_url = f"https://www.tiktok.com/@{data.get('author', {}).get('unique_id')}"
+    
+    markup.row(
+        InlineKeyboardButton(get_msg(cid, 'btn_refresh'), callback_data=refresh_callback), 
+        InlineKeyboardButton(get_msg(cid, 'btn_profile'), url=profile_url)
+    )
+    
+    return caption, markup
+
 # --- BOT HANDLER ---
 
 @bot.message_handler(commands=['start'])
@@ -349,6 +392,44 @@ def callback_check_sub(call):
         alert_text = get_msg(chat_id, "not_joined_alert")
         bot.answer_callback_query(call.id, alert_text, show_alert=True)
 
+# --- YENİ EKLENEN: REFRESH HANDLER ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("refresh_"))
+def callback_refresh_video(call):
+    cid = call.message.chat.id
+    video_id = call.data.split("_")[1]
+    
+    # Kullanıcıya işlem yapıldığını göster
+    try:
+        bot.answer_callback_query(call.id, get_msg(cid, "updating"))
+    except: pass
+    
+    # ID üzerinden link oluştur (TikTok standart formatı)
+    url = f"https://m.tiktok.com/v/{video_id}"
+    
+    try:
+        # Aynı analiz işlemini tekrar yap
+        response = requests.post(TIKWM_API_URL, data={"url": url, "hd": 1}, headers={"User-Agent": "Mozilla/5.0"}).json()
+        
+        if response.get("code") == 0:
+            data = response.get("data", {})
+            browser_url = data.get("play")  
+            mobile_url = data.get("hdplay")
+            
+            browser_meta = get_video_metadata(browser_url)
+            mobile_meta = get_video_metadata(mobile_url) if (mobile_url and mobile_url != browser_url) else browser_meta
+            
+            # Yeni içerik oluştur
+            caption, markup = prepare_message_content(data, browser_meta, mobile_meta, cid)
+            
+            # Mesajı güncelle
+            bot.edit_message_caption(chat_id=cid, message_id=call.message.message_id, caption=caption, reply_markup=markup, parse_mode='Markdown')
+        else:
+            bot.answer_callback_query(call.id, get_msg(cid, "err_not_found"), show_alert=True)
+            
+    except Exception as e:
+        bot.answer_callback_query(call.id, f"{get_msg(cid, 'err_general')} {str(e)[:20]}", show_alert=True)
+
+
 @bot.message_handler(func=lambda message: True)
 def analyze_video(message):
     cid = message.chat.id
@@ -375,42 +456,8 @@ def analyze_video(message):
             browser_meta = get_video_metadata(browser_url)
             mobile_meta = get_video_metadata(mobile_url) if (mobile_url and mobile_url != browser_url) else browser_meta
 
-            views = data.get("play_count", 0)
-            likes = data.get("digg_count", 0)
-            comments = data.get("comment_count", 0) 
-            shares = data.get("share_count", 0)
-            if views > 0:
-                eng_rate = ((likes + comments + shares) / views) * 100
-            else:
-                eng_rate = 0
-            view_bar = create_stat_bar(views, 100000)
-            like_bar = create_stat_bar(likes, 50000)
-            bot_alert = ""
-            if likes > views:
-                bot_alert = f"\n\n{get_msg(cid, 'bot_warning')}"
-            def safe(meta, key): return meta.get(key, "?") if meta else "?"
-            def size(meta): return format_size(meta.get("size_bytes", 0)) if meta else "?"
-
-            video_id = data.get("id")
-            creation_date = get_date_from_id(video_id)
-            region = data.get("region", "Global").upper()
-            title = data.get("title", "")
-            if not title: title = get_msg(cid, "no_desc")
-
-            caption = (
-                f"{get_msg(cid, 'desc_header')}\n_“{title}”_\n\n"
-                f"{get_msg(cid, 'id_region_header')}\n├ 🔢 ID: `{video_id}`\n├ 🌍 {get_msg(cid, 'region')}: `{region}`\n└ 📅 {get_msg(cid, 'date')}: `{creation_date}`\n\n"
-                f"{get_msg(cid, 'stats_header')}\n`👁 {format_number(views):<6}` {view_bar}\n`♥ {format_number(likes):<6}` {like_bar}\n\n"
-                f"📈 {get_msg(cid, 'engagement')}: `%{eng_rate:.2f}`"
-                f"{bot_alert}\n\n"
-                f"{get_msg(cid, 'web_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(browser_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(browser_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(browser_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(browser_meta)}`\n\n"
-                f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(mobile_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
-                f"{get_msg(cid, 'publisher')} `@{data.get('author', {}).get('unique_id')}`"
-            )
-            
-            markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton(f"{get_msg(cid, 'btn_download')} (HD - {size(mobile_meta)})", url=mobile_url))
-            markup.row(InlineKeyboardButton(get_msg(cid, 'btn_music'), url=data.get("music")), InlineKeyboardButton(get_msg(cid, 'btn_profile'), url=f"https://www.tiktok.com/@{data.get('author', {}).get('unique_id')}"))
+            # Ortak fonksiyonu kullanıyoruz
+            caption, markup = prepare_message_content(data, browser_meta, mobile_meta, cid)
 
             if data.get("cover"):
                 bot.delete_message(message.chat.id, msg.message_id)
@@ -439,4 +486,3 @@ print("Bot aktif...")
 keep_alive()  # Flask sunucusunu başlat
 
 bot.infinity_polling() # Botu başlat
-
