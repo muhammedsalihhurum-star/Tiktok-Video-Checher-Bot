@@ -84,7 +84,7 @@ def api_analyze():
         return jsonify({"success": False, "message": str(e)})
 
 # --- 3. TELEGRAM BOT AYARLARI ---
-BOT_TOKEN = '8584063240:AAGOBsruSQVAFwQxNxYH9WbMgL52MqmeruM'
+BOT_TOKEN = '8584063240:AAH7BWquRzmpkzd_59TQeOgzjdJ9jVbQaDY'
 bot = telebot.TeleBot(BOT_TOKEN)
 
 TIKWM_API_URL = "https://tikwm.com/api/"
@@ -486,3 +486,4 @@ print("Bot aktif...")
 keep_alive()  # Flask sunucusunu başlat
 
 bot.infinity_polling() # Botu başlat
+
