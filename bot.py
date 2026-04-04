@@ -293,7 +293,7 @@ def get_video_metadata(video_url, is_mobile=False):
                         
                         # Keşfettiğimiz 27 FPS (120fps hilesi) imzası
                         if real_fps == 27:
-                            fps_sonuc = f"{fps:.0f} ({real_fps}fps)" # Burayı (120fps) olarak da değiştirebilirsin
+                            fps_sonuc = f"{fps:.0f} (60 fps)" # Burayı (120fps) olarak da değiştirebilirsin
                         elif abs(real_fps - reported_fps) > (reported_fps * 0.1):
                             fps_sonuc = f"{fps:.0f} ({real_fps}fps)"
             except:
