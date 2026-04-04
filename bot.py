@@ -253,71 +253,65 @@ def simulate_loading(chat_id, message_id):
         except: pass
 
 def get_video_metadata(video_url):
-    if not video_url: return None
+    if not video_url:
+        return None
     try:
-        # 1. STANDART ANALİZ (Header Bilgileri)
         probe = ffmpeg.probe(video_url)
-        video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-        if video_stream is None: return None
+        fmt = probe.get("format", {})
         
-        # Kağıt üzerindeki FPS (Header FPS)
-        avg_frame_rate = video_stream.get('avg_frame_rate', '0/0')
-        if '/' in avg_frame_rate:
-            num, den = map(int, avg_frame_rate.split('/'))
-            header_fps = float(num) / float(den) if den > 0 else 0
+        video_stream = next((s for s in probe['streams'] if s['codec_type'] == 'video'), None)
+        if not video_stream:
+            return None
+
+        avg = video_stream.get('avg_frame_rate', '0/0')
+        num, den = map(int, avg.split('/')) if '/' in avg else (0, 1)
+        reported_fps = (num / den) if den else 0
+
+        frames = video_stream.get("nb_frames")
+        if frames:
+            frames = int(frames)
         else:
-            header_fps = float(avg_frame_rate)
+            frames = None
 
-        # 2. DERİN ZAMAN ANALİZİ (PTS/DTS Kontrolü)
-        is_bypass = False
-        try:
-            # İlk birkaç karenin zaman pullarını ffprobe ile çekiyoruz
-            import subprocess
-            import json
-            cmd = [
-                'ffprobe', '-v', 'error', '-select_streams', 'v:0',
-                '-show_entries', 'frame=pkt_pts_time', '-of', 'json', 
-                '-read_intervals', '%+1', video_url
-            ]
-            process = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-            frame_data = json.loads(process.stdout)
-            frames = frame_data.get('frames', [])
+        duration = float(video_stream.get("duration") or fmt.get("duration") or 0)
 
-            if len(frames) >= 2:
-                # İki kare arasındaki milisaniyelik farkı hesapla
-                t1 = float(frames[0].get('pkt_pts_time', 0))
-                t2 = float(frames[1].get('pkt_pts_time', 0))
-                delta = t2 - t1
-                
-                # Kare hızı 60 FPS (0.016s) gibi akıyor ama tabela 45'in altındaysa BYPASS!
-                if delta < 0.020 and header_fps < 45:
-                    is_bypass = True
-        except:
-            pass
+        real_fps = 0
+        is_itsscaled = False
+        original_fps = reported_fps
 
-        # 3. GÖRÜNÜMÜ HAZIRLA
-        fps_val = f"{header_fps:.0f}"
-        fps_display = f"{fps_val} (120 FPS Bypass ⚡)" if is_bypass else fps_val
+        if frames and duration > 0:
+            real_fps = frames / duration
+            if abs(real_fps - reported_fps * 2) < 1:
+                is_itsscaled = True
+                original_fps = int(real_fps)
 
-        # Teknik veriler
-        bps = int(video_stream.get('bit_rate', 0) or probe['format'].get('bit_rate', 0))
-        bitrate_str = f"{bps / 1_000_000:.1f} Mbps" if bps > 1_000_000 else f"{bps / 1000:.0f} kbps"
+        bps = int(video_stream.get('bit_rate', 0) or fmt.get('bit_rate', 0))
+        bitrate_str = f"{bps / 1_000_000:.1f} Mbps" if bps >= 1_000_000 else f"{bps / 1000:.0f} kbps"
+
         width = video_stream.get('width')
         height = video_stream.get('height')
-        short_side = min(width, height)
-        
-        if short_side >= 1080: quality = "FHD (1080p)"
-        elif short_side >= 720: quality = "HD (720p)"
-        else: quality = "SD (480p)"
-        
+
+        short = min(width, height)
+        if short >= 1080:
+            quality = "FHD (1080p)"
+        elif short >= 720:
+            quality = "HD (720p)"
+        else:
+            quality = "SD (480p)"
+
         return {
             "res": f"{width}x{height}",
             "quality": quality,
-            "fps": fps_display, 
+            "fps": f"{reported_fps:.0f}",
+            "original_fps": f"{original_fps}",
+            "is_itsscaled": is_itsscaled,
             "bitrate": bitrate_str,
-            "size_bytes": int(probe['format'].get('size', 0))
+            "size_bytes": int(fmt.get("size", 0))
         }
-    except: return None
+
+    except:
+        return None
+
 def format_number(num):
     if not num: return "0"
     if num > 1000000: return f"{num/1000000:.1f}M"
