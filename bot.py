@@ -272,13 +272,25 @@ def get_video_metadata(video_url):
         try:
             import subprocess
             cmd = [
-                'ffprobe', '-v', 'error', '-select_streams', 'v:0', 
+                'ffprobe', '-v', 'error', 
+                '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', # TİKTOK BİZİ BOT SANMASIN DİYE EKLENDİ
+                '-select_streams', 'v:0', 
                 '-show_packets', '-show_entries', 'packet=pts_time', 
                 '-of', 'default=noprint_wrappers=1:nokey=1', 
-                '-read_intervals', '%+#20', video_url
+                '-read_intervals', '%+#30', # İlk 30 paketi oku (garanti olsun)
+                video_url
             ]
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, timeout=5)
+            
+            print(f"\n[DEDEKTİF] Analiz ediliyor: {video_url[:60]}...")
+            # Süreyi 10 saniyeye çıkardık
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+            
+            # Eğer ffprobe hata verirse (örn 403 Forbidden) konsola bas
+            if res.stderr:
+                print(f"[DEDEKTİF HATASI] FFprobe: {res.stderr.strip()}")
+                
             pts_list = [float(x) for x in res.stdout.strip().split('\n') if x.strip()]
+            print(f"[DEDEKTİF] {len(pts_list)} adet paket okundu.")
             
             if len(pts_list) >= 5:
                 pts_list.sort() 
@@ -289,12 +301,19 @@ def get_video_metadata(video_url):
                     real_fps = round(1.0 / avg_delta)
                     reported_fps = round(fps)
                     
-                    # Eğer hile varsa (gerçek FPS, metadatadan %10 farklıysa)
+                    print(f"[DEDEKTİF] Metadatadaki FPS: {reported_fps} | Gerçek Zaman Damgası FPS'i: {real_fps}")
+                    
                     if abs(real_fps - reported_fps) > (reported_fps * 0.1):
-                        # Orijinal sayının yanına parantez içinde gerçek FPS'i ekle
                         fps_sonuc = f"{fps:.0f} ({real_fps}fps)"
-        except Exception:
-            pass # Eğer hata verirse botu çökertme, orijinal FPS ile devam et
+                        print("[DEDEKTİF] 🚨 İTSSCALE YAKALANDI!")
+                    else:
+                        print("[DEDEKTİF] ✅ Zaman damgaları temiz.")
+        except subprocess.TimeoutExpired:
+            print("[DEDEKTİF ÇÖKTÜ] Süre aşımı! Video 10 saniyede okunamadı.")
+        except Exception as e:
+            print(f"[DEDEKTİF ÇÖKTÜ] Beklenmedik hata: {e}")
+            
+        # --- DİĞER VERİLER BURADAN DEVAM EDİYOR ---
             
         # --- DİĞER VERİLER ---
         bps = int(video_stream.get('bit_rate', 0) or probe['format'].get('bit_rate', 0))
