@@ -338,6 +338,7 @@ def prepare_message_content(data, browser_meta, mobile_meta, cid):
     refresh_id = f"refresh_{vid}"
     profile_url = f"[tiktok.com](https://www.tiktok.com/@{data.get()'author', {}).get('unique_id')}"
 
+
     markup.row(
         InlineKeyboardButton(get_msg(cid, "btn_refresh"), callback_data=refresh_id),
         InlineKeyboardButton(get_msg(cid, "btn_profile"), url=profile_url)
