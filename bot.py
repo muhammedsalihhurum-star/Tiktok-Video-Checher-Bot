@@ -250,15 +250,14 @@ def simulate_loading(chat_id, message_id):
             time.sleep(0.3)
         except: pass
 
-def get_video_metadata(video_url):
+def get_video_metadata(video_url, is_mobile=False):
     if not video_url: return None
     try:
-        import ffmpeg # ffmpeg'in import edildiğinden emin olmak için
         probe = ffmpeg.probe(video_url)
         video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
         if video_stream is None: return None
         
-        # --- NORMAL FPS'İ AL (Değer ne geliyorsa o) ---
+        # Orijinal FPS'i al (Değer neyse o)
         avg_frame_rate = video_stream.get('avg_frame_rate', '0/0')
         if '/' in avg_frame_rate:
             num, den = map(int, avg_frame_rate.split('/'))
@@ -267,64 +266,48 @@ def get_video_metadata(video_url):
             fps = float(avg_frame_rate)
             
         fps_sonuc = f"{fps:.0f}" 
-        
-        # --- ITSCALE DEDEKTİFİ KONTROLÜ ---
-        try:
-            import subprocess
-            cmd = [
-                'ffprobe', '-v', 'error', 
-                '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', # TİKTOK BİZİ BOT SANMASIN DİYE EKLENDİ
-                '-select_streams', 'v:0', 
-                '-show_packets', '-show_entries', 'packet=pts_time', 
-                '-of', 'default=noprint_wrappers=1:nokey=1', 
-                '-read_intervals', '%+#30', # İlk 30 paketi oku (garanti olsun)
-                video_url
-            ]
-            
-            print(f"\n[DEDEKTİF] Analiz ediliyor: {video_url[:60]}...")
-            # Süreyi 10 saniyeye çıkardık
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
-            
-            # Eğer ffprobe hata verirse (örn 403 Forbidden) konsola bas
-            if res.stderr:
-                print(f"[DEDEKTİF HATASI] FFprobe: {res.stderr.strip()}")
+
+        # Sadece mobil sürüm analiz ediliyorsa itsscale kontrolü yap
+        if is_mobile:
+            try:
+                import subprocess
+                cmd = [
+                    'ffprobe', '-v', 'error', 
+                    '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                    '-select_streams', 'v:0', 
+                    '-show_packets', '-show_entries', 'packet=pts_time', 
+                    '-of', 'default=noprint_wrappers=1:nokey=1', 
+                    '-read_intervals', '%+#30', video_url
+                ]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, timeout=8)
+                pts_list = [float(x) for x in res.stdout.strip().split('\n') if x.strip()]
                 
-            pts_list = [float(x) for x in res.stdout.strip().split('\n') if x.strip()]
-            print(f"[DEDEKTİF] {len(pts_list)} adet paket okundu.")
-            
-            if len(pts_list) >= 5:
-                pts_list.sort() 
-                deltas = [pts_list[i] - pts_list[i-1] for i in range(1, len(pts_list)) if (pts_list[i] - pts_list[i-1]) > 0.001]
-                
-                if deltas:
-                    avg_delta = sum(deltas) / len(deltas)
-                    real_fps = round(1.0 / avg_delta)
-                    reported_fps = round(fps)
+                if len(pts_list) >= 5:
+                    pts_list.sort() 
+                    deltas = [pts_list[i] - pts_list[i-1] for i in range(1, len(pts_list)) if (pts_list[i] - pts_list[i-1]) > 0.001]
                     
-                    print(f"[DEDEKTİF] Metadatadaki FPS: {reported_fps} | Gerçek Zaman Damgası FPS'i: {real_fps}")
-                    
-                    if abs(real_fps - reported_fps) > (reported_fps * 0.1):
-                        fps_sonuc = f"{fps:.0f} ({real_fps}fps)"
-                        print("[DEDEKTİF] 🚨 İTSSCALE YAKALANDI!")
-                    else:
-                        print("[DEDEKTİF] ✅ Zaman damgaları temiz.")
-        except subprocess.TimeoutExpired:
-            print("[DEDEKTİF ÇÖKTÜ] Süre aşımı! Video 10 saniyede okunamadı.")
-        except Exception as e:
-            print(f"[DEDEKTİF ÇÖKTÜ] Beklenmedik hata: {e}")
+                    if deltas:
+                        avg_delta = sum(deltas) / len(deltas)
+                        real_fps = round(1.0 / avg_delta)
+                        reported_fps = round(fps)
+                        
+                        # Keşfettiğimiz 27 FPS (120fps hilesi) imzası
+                        if real_fps == 27:
+                            fps_sonuc = f"{fps:.0f} ({real_fps}fps)" # Burayı (120fps) olarak da değiştirebilirsin
+                        elif abs(real_fps - reported_fps) > (reported_fps * 0.1):
+                            fps_sonuc = f"{fps:.0f} ({real_fps}fps)"
+            except:
+                pass
             
-        # --- DİĞER VERİLER BURADAN DEVAM EDİYOR ---
-            
-        # --- DİĞER VERİLER ---
         bps = int(video_stream.get('bit_rate', 0) or probe['format'].get('bit_rate', 0))
         bitrate_str = f"{bps / 1_000_000:.1f} Mbps" if bps > 1_000_000 else f"{bps / 1000:.0f} kbps"
         width = video_stream.get('width')
         height = video_stream.get('height')
         short_side = min(width, height)
         
+        quality = "SD (480p)"
         if short_side >= 1080: quality = "FHD (1080p)"
         elif short_side >= 720: quality = "HD (720p)"
-        else: quality = "SD (480p)"
         
         return {
             "res": f"{width}x{height}",
@@ -471,9 +454,12 @@ def callback_refresh_video(call):
             browser_url = data.get("play")  
             mobile_url = data.get("hdplay")
             
-            browser_meta = get_video_metadata(browser_url)
-            mobile_meta = get_video_metadata(mobile_url) if (mobile_url and mobile_url != browser_url) else browser_meta
-            
+            # Kaynak için is_mobile False (Parantez gelmez)
+            browser_meta = get_video_metadata(browser_url, is_mobile=False)
+
+            # Mobil için is_mobile True (Hile varsa parantez gelir)
+            m_url = mobile_url if mobile_url else browser_url
+            mobile_meta = get_video_metadata(m_url, is_mobile=True)
             # Yeni içerik oluştur
             caption, markup = prepare_message_content(data, browser_meta, mobile_meta, cid)
             
