@@ -454,10 +454,10 @@ def callback_refresh_video(call):
             browser_url = data.get("play")  
             mobile_url = data.get("hdplay")
             
-            # Kaynak için is_mobile False (Parantez gelmez)
+            # Kaynak temiz kalsın
             browser_meta = get_video_metadata(browser_url, is_mobile=False)
-
-            # Mobil için is_mobile True (Hile varsa parantez gelir)
+            
+            # Mobil için hileyi yakalasın
             m_url = mobile_url if mobile_url else browser_url
             mobile_meta = get_video_metadata(m_url, is_mobile=True)
             # Yeni içerik oluştur
@@ -495,8 +495,12 @@ def analyze_video(message):
             browser_url = data.get("play")  
             mobile_url = data.get("hdplay")
             
-            browser_meta = get_video_metadata(browser_url)
-            mobile_meta = get_video_metadata(mobile_url) if (mobile_url and mobile_url != browser_url) else browser_meta
+            # Kaynak için dedektifi kapalı tutuyoruz (False)
+            browser_meta = get_video_metadata(browser_url, is_mobile=False)
+
+            # Mobil sürüm için dedektifi açıyoruz (True)
+            m_url = mobile_url if mobile_url else browser_url
+            mobile_meta = get_video_metadata(m_url, is_mobile=True)
 
             # Ortak fonksiyonu kullanıyoruz
             caption, markup = prepare_message_content(data, browser_meta, mobile_meta, cid)
