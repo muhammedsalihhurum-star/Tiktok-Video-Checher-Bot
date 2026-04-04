@@ -5,6 +5,8 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import datetime
 import ffmpeg
 import time
+import subprocess
+import json
 import sys
 from threading import Thread
 import os
@@ -253,39 +255,65 @@ def simulate_loading(chat_id, message_id):
 def get_video_metadata(video_url):
     if not video_url: return None
     try:
+        # 1. STANDART ANALİZ (Header Bilgileri)
         probe = ffmpeg.probe(video_url)
         video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
         if video_stream is None: return None
         
-        # Standart FPS hesabı
+        # Kağıt üzerindeki FPS (Header FPS)
         avg_frame_rate = video_stream.get('avg_frame_rate', '0/0')
         if '/' in avg_frame_rate:
             num, den = map(int, avg_frame_rate.split('/'))
-            fps = float(num) / float(den) if den > 0 else 0
+            header_fps = float(num) / float(den) if den > 0 else 0
         else:
-            fps = float(avg_frame_rate)
-            
-        # --- KURONAI DEDEKTÖRÜ ---
-        # Videonun telif hakkı (copyright) kısmına bakıyoruz
-        tags = probe.get('format', {}).get('tags', {})
-        if tags.get('copyright') == 'KuronaiBypass':
-            fps_display = f"{fps:.0f} (120 FPS)"
-        else:
-            fps_display = f"{fps:.0f}"
-        # -------------------------
+            header_fps = float(avg_frame_rate)
 
+        # 2. DERİN ZAMAN ANALİZİ (PTS/DTS Kontrolü)
+        is_bypass = False
+        try:
+            # İlk birkaç karenin zaman pullarını ffprobe ile çekiyoruz
+            import subprocess
+            import json
+            cmd = [
+                'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                '-show_entries', 'frame=pkt_pts_time', '-of', 'json', 
+                '-read_intervals', '%+1', video_url
+            ]
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            frame_data = json.loads(process.stdout)
+            frames = frame_data.get('frames', [])
+
+            if len(frames) >= 2:
+                # İki kare arasındaki milisaniyelik farkı hesapla
+                t1 = float(frames[0].get('pkt_pts_time', 0))
+                t2 = float(frames[1].get('pkt_pts_time', 0))
+                delta = t2 - t1
+                
+                # Kare hızı 60 FPS (0.016s) gibi akıyor ama tabela 45'in altındaysa BYPASS!
+                if delta < 0.020 and header_fps < 45:
+                    is_bypass = True
+        except:
+            pass
+
+        # 3. GÖRÜNÜMÜ HAZIRLA
+        fps_val = f"{header_fps:.0f}"
+        fps_display = f"{fps_val} (120 FPS Bypass ⚡)" if is_bypass else fps_val
+
+        # Teknik veriler
         bps = int(video_stream.get('bit_rate', 0) or probe['format'].get('bit_rate', 0))
         bitrate_str = f"{bps / 1_000_000:.1f} Mbps" if bps > 1_000_000 else f"{bps / 1000:.0f} kbps"
-        
         width = video_stream.get('width')
         height = video_stream.get('height')
         short_side = min(width, height)
-        quality = "FHD (1080p)" if short_side >= 1080 else ("HD (720p)" if short_side >= 720 else "SD (480p)")
+        
+        if short_side >= 1080: quality = "FHD (1080p)"
+        elif short_side >= 720: quality = "HD (720p)"
+        else: quality = "SD (480p)"
         
         return {
             "res": f"{width}x{height}",
             "quality": quality,
-            "fps": fps_display, # Burası güncellendi
+            "fps": fps_display, 
             "bitrate": bitrate_str,
             "size_bytes": int(probe['format'].get('size', 0))
         }
