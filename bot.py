@@ -256,24 +256,49 @@ def get_video_metadata(video_url):
         probe = ffmpeg.probe(video_url)
         video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
         if video_stream is None: return None
+        
+        # Klasik FPS hesabı
         avg_frame_rate = video_stream.get('avg_frame_rate', '0/0')
         if '/' in avg_frame_rate:
             num, den = map(int, avg_frame_rate.split('/'))
             fps = float(num) / float(den) if den > 0 else 0
         else:
             fps = float(avg_frame_rate)
+            
+        # --- 🕵️ KURONAI GİZLİ İMZA DEDEKTÖRÜ ---
+        is_kuronai = False
+        
+        # 1. Container (Format) meta verilerine bak
+        format_tags = probe.get('format', {}).get('tags', {})
+        if "KuronaiBypass" in format_tags.get('copyright', '') or "KuronaiBypass" in format_tags.get('comment', ''):
+            is_kuronai = True
+            
+        # 2. Stream (Video akışı) meta verilerine bak
+        stream_tags = video_stream.get('tags', {})
+        if "KuronaiBypass" in stream_tags.get('copyright', '') or "KuronaiBypass" in stream_tags.get('comment', ''):
+            is_kuronai = True
+
+        # Eğer videonun DNA'sında imzamız varsa X-Ray'de havalı yazıyı göster!
+        if is_kuronai:
+            final_fps = "120 ⚡"
+        else:
+            final_fps = f"{fps:.0f}"
+        # ----------------------------------------
+
         bps = int(video_stream.get('bit_rate', 0) or probe['format'].get('bit_rate', 0))
         bitrate_str = f"{bps / 1_000_000:.1f} Mbps" if bps > 1_000_000 else f"{bps / 1000:.0f} kbps"
         width = video_stream.get('width')
         height = video_stream.get('height')
         short_side = min(width, height)
+        
         if short_side >= 1080: quality = "FHD (1080p)"
         elif short_side >= 720: quality = "HD (720p)"
         else: quality = "SD (480p)"
+        
         return {
             "res": f"{width}x{height}",
             "quality": quality,
-            "fps": f"{fps:.0f}", 
+            "fps": final_fps, # Güncellenmiş FPS verisini gönderiyoruz
             "bitrate": bitrate_str,
             "size_bytes": int(probe['format'].get('size', 0))
         }
