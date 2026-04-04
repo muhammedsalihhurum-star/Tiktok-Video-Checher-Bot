@@ -335,9 +335,8 @@ def prepare_message_content(data, browser_meta, mobile_meta, cid):
     markup.add(InlineKeyboardButton(
         f"{get_msg(cid, 'btn_download')} (HD - {size(mobile_meta)})", url=mobile_url))
 
-    refresh_id = f"refresh_{vid}"
-    profile_url = f"[tiktok.com](https://www.tiktok.com/@{data.get()'author', {}).get('unique_id')}"
-
+    refresh_callback = f"refresh_{video_id}"
+    profile_url = f"https://www.tiktok.com/@{data.get('author', {}).get('unique_id')}"
 
 
     markup.row(
