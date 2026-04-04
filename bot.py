@@ -257,7 +257,7 @@ def get_video_metadata(video_url):
         video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
         if video_stream is None: return None
         
-        # Klasik FPS hesabı
+        # Standart FPS hesabı
         avg_frame_rate = video_stream.get('avg_frame_rate', '0/0')
         if '/' in avg_frame_rate:
             num, den = map(int, avg_frame_rate.split('/'))
@@ -265,45 +265,31 @@ def get_video_metadata(video_url):
         else:
             fps = float(avg_frame_rate)
             
-        # --- 🕵️ KURONAI GİZLİ İMZA DEDEKTÖRÜ ---
-        is_kuronai = False
-        
-        # 1. Container (Format) meta verilerine bak
-        format_tags = probe.get('format', {}).get('tags', {})
-        if "KuronaiBypass" in format_tags.get('copyright', '') or "KuronaiBypass" in format_tags.get('comment', ''):
-            is_kuronai = True
-            
-        # 2. Stream (Video akışı) meta verilerine bak
-        stream_tags = video_stream.get('tags', {})
-        if "KuronaiBypass" in stream_tags.get('copyright', '') or "KuronaiBypass" in stream_tags.get('comment', ''):
-            is_kuronai = True
-
-        # Eğer videonun DNA'sında imzamız varsa X-Ray'de havalı yazıyı göster!
-        if is_kuronai:
-            final_fps = "120 ⚡"
+        # --- KURONAI DEDEKTÖRÜ ---
+        # Videonun telif hakkı (copyright) kısmına bakıyoruz
+        tags = probe.get('format', {}).get('tags', {})
+        if tags.get('copyright') == 'KuronaiBypass':
+            fps_display = f"{fps:.0f} (120 FPS)"
         else:
-            final_fps = f"{fps:.0f}"
-        # ----------------------------------------
+            fps_display = f"{fps:.0f}"
+        # -------------------------
 
         bps = int(video_stream.get('bit_rate', 0) or probe['format'].get('bit_rate', 0))
         bitrate_str = f"{bps / 1_000_000:.1f} Mbps" if bps > 1_000_000 else f"{bps / 1000:.0f} kbps"
+        
         width = video_stream.get('width')
         height = video_stream.get('height')
         short_side = min(width, height)
-        
-        if short_side >= 1080: quality = "FHD (1080p)"
-        elif short_side >= 720: quality = "HD (720p)"
-        else: quality = "SD (480p)"
+        quality = "FHD (1080p)" if short_side >= 1080 else ("HD (720p)" if short_side >= 720 else "SD (480p)")
         
         return {
             "res": f"{width}x{height}",
             "quality": quality,
-            "fps": final_fps, # Güncellenmiş FPS verisini gönderiyoruz
+            "fps": fps_display, # Burası güncellendi
             "bitrate": bitrate_str,
             "size_bytes": int(probe['format'].get('size', 0))
         }
     except: return None
-
 def format_number(num):
     if not num: return "0"
     if num > 1000000: return f"{num/1000000:.1f}M"
