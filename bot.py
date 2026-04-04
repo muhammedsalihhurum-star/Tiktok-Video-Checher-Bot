@@ -253,27 +253,64 @@ def simulate_loading(chat_id, message_id):
 def get_video_metadata(video_url):
     if not video_url: return None
     try:
+        import ffmpeg # ffmpeg'in import edildiğinden emin olmak için
         probe = ffmpeg.probe(video_url)
         video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
         if video_stream is None: return None
+        
+        # --- NORMAL FPS'İ AL (Değer ne geliyorsa o) ---
         avg_frame_rate = video_stream.get('avg_frame_rate', '0/0')
         if '/' in avg_frame_rate:
             num, den = map(int, avg_frame_rate.split('/'))
             fps = float(num) / float(den) if den > 0 else 0
         else:
             fps = float(avg_frame_rate)
+            
+        fps_sonuc = f"{fps:.0f}" 
+        
+        # --- ITSCALE DEDEKTİFİ KONTROLÜ ---
+        try:
+            import subprocess
+            cmd = [
+                'ffprobe', '-v', 'error', '-select_streams', 'v:0', 
+                '-show_packets', '-show_entries', 'packet=pts_time', 
+                '-of', 'default=noprint_wrappers=1:nokey=1', 
+                '-read_intervals', '%+#20', video_url
+            ]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, timeout=5)
+            pts_list = [float(x) for x in res.stdout.strip().split('\n') if x.strip()]
+            
+            if len(pts_list) >= 5:
+                pts_list.sort() 
+                deltas = [pts_list[i] - pts_list[i-1] for i in range(1, len(pts_list)) if (pts_list[i] - pts_list[i-1]) > 0.001]
+                
+                if deltas:
+                    avg_delta = sum(deltas) / len(deltas)
+                    real_fps = round(1.0 / avg_delta)
+                    reported_fps = round(fps)
+                    
+                    # Eğer hile varsa (gerçek FPS, metadatadan %10 farklıysa)
+                    if abs(real_fps - reported_fps) > (reported_fps * 0.1):
+                        # Orijinal sayının yanına parantez içinde gerçek FPS'i ekle
+                        fps_sonuc = f"{fps:.0f} ({real_fps}fps)"
+        except Exception:
+            pass # Eğer hata verirse botu çökertme, orijinal FPS ile devam et
+            
+        # --- DİĞER VERİLER ---
         bps = int(video_stream.get('bit_rate', 0) or probe['format'].get('bit_rate', 0))
         bitrate_str = f"{bps / 1_000_000:.1f} Mbps" if bps > 1_000_000 else f"{bps / 1000:.0f} kbps"
         width = video_stream.get('width')
         height = video_stream.get('height')
         short_side = min(width, height)
+        
         if short_side >= 1080: quality = "FHD (1080p)"
         elif short_side >= 720: quality = "HD (720p)"
         else: quality = "SD (480p)"
+        
         return {
             "res": f"{width}x{height}",
             "quality": quality,
-            "fps": f"{fps:.0f}", 
+            "fps": fps_sonuc, 
             "bitrate": bitrate_str,
             "size_bytes": int(probe['format'].get('size', 0))
         }
