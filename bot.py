@@ -28,10 +28,10 @@ def api_analyze():
             browser_url = data.get("play")      
             mobile_url = data.get("hdplay")     
             
-            browser_meta = get_video_metadata(browser_url)
+            browser_meta = get_video_metadata(browser_url, is_mobile=False)
             
-            if mobile_url and mobile_url != browser_url:
-                mobile_meta = get_video_metadata(mobile_url)
+            m_url = mobile_url if mobile_url else browser_url
+                mobile_meta = get_video_metadata(m_url, is_mobile=True)
             else:
                 mobile_meta = browser_meta
 
@@ -250,55 +250,51 @@ def simulate_loading(chat_id, message_id):
             time.sleep(0.3)
         except: pass
 
-def get_video_metadata(video_url, is_mobile=False):
+def get_video_metadata(video_url, is_mobile=False): # is_mobile eklendi
     if not video_url: return None
     try:
+        import ffmpeg
         probe = ffmpeg.probe(video_url)
         video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
         if video_stream is None: return None
         
-        # Orijinal FPS'i al (Değer neyse o)
+        # Standart FPS değerini al
         avg_frame_rate = video_stream.get('avg_frame_rate', '0/0')
         if '/' in avg_frame_rate:
             num, den = map(int, avg_frame_rate.split('/'))
             fps = float(num) / float(den) if den > 0 else 0
         else:
             fps = float(avg_frame_rate)
-            
+        
+        # Varsayılan olarak sadece sayıyı hazırla
         fps_sonuc = f"{fps:.0f}" 
 
-        # Sadece mobil sürüm analiz ediliyorsa itsscale kontrolü yap
+        # EĞER MOBİL İÇİN ÇAĞRILDIYSA DEDEKTİFİ ÇALIŞTIR
         if is_mobile:
             try:
                 import subprocess
                 cmd = [
-                    'ffprobe', '-v', 'error', 
-                    '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-                    '-select_streams', 'v:0', 
-                    '-show_packets', '-show_entries', 'packet=pts_time', 
-                    '-of', 'default=noprint_wrappers=1:nokey=1', 
-                    '-read_intervals', '%+#30', video_url
+                    'ffprobe', '-v', 'error', '-user_agent', 'Mozilla/5.0',
+                    '-select_streams', 'v:0', '-show_packets', '-show_entries', 'packet=pts_time', 
+                    '-of', 'default=noprint_wrappers=1:nokey=1', '-read_intervals', '%+#30', video_url
                 ]
                 res = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, timeout=8)
                 pts_list = [float(x) for x in res.stdout.strip().split('\n') if x.strip()]
                 
                 if len(pts_list) >= 5:
-                    pts_list.sort() 
+                    pts_list.sort()
                     deltas = [pts_list[i] - pts_list[i-1] for i in range(1, len(pts_list)) if (pts_list[i] - pts_list[i-1]) > 0.001]
-                    
                     if deltas:
                         avg_delta = sum(deltas) / len(deltas)
                         real_fps = round(1.0 / avg_delta)
-                        reported_fps = round(fps)
                         
-                        # Keşfettiğimiz 27 FPS (120fps hilesi) imzası
+                        # Keşfettiğin 27 FPS (120fps) imzası kontrolü
                         if real_fps == 27:
-                            fps_sonuc = f"{fps:.0f} (60 fps)" # Burayı (120fps) olarak da değiştirebilirsin
-                        elif abs(real_fps - reported_fps) > (reported_fps * 0.1):
-                            fps_sonuc = f"{fps:.0f} ({real_fps}fps)"
+                            fps_sonuc = f"{fps:.0f} (120fps)"
             except:
-                pass
-            
+                pass # Hata olursa normal FPS ile devam et
+
+        # ... Diğer teknik veriler (bitrate, res vb.) aynı kalıyor ...
         bps = int(video_stream.get('bit_rate', 0) or probe['format'].get('bit_rate', 0))
         bitrate_str = f"{bps / 1_000_000:.1f} Mbps" if bps > 1_000_000 else f"{bps / 1000:.0f} kbps"
         width = video_stream.get('width')
@@ -312,7 +308,7 @@ def get_video_metadata(video_url, is_mobile=False):
         return {
             "res": f"{width}x{height}",
             "quality": quality,
-            "fps": fps_sonuc, 
+            "fps": fps_sonuc, # Burası duruma göre "30" veya "30 (120fps)" olacak
             "bitrate": bitrate_str,
             "size_bytes": int(probe['format'].get('size', 0))
         }
@@ -454,13 +450,13 @@ def callback_refresh_video(call):
             browser_url = data.get("play")  
             mobile_url = data.get("hdplay")
             
-            # Kaynak temiz kalsın
+            # Kaynak kısmı
             browser_meta = get_video_metadata(browser_url, is_mobile=False)
             
-            # Mobil için hileyi yakalasın
+            # Mobil kısmı
             m_url = mobile_url if mobile_url else browser_url
             mobile_meta = get_video_metadata(m_url, is_mobile=True)
-            # Yeni içerik oluştur
+                        # Yeni içerik oluştur
             caption, markup = prepare_message_content(data, browser_meta, mobile_meta, cid)
             
             # Mesajı güncelle
@@ -495,12 +491,12 @@ def analyze_video(message):
             browser_url = data.get("play")  
             mobile_url = data.get("hdplay")
             
-            # Kaynak için dedektifi kapalı tutuyoruz (False)
+            # Kaynak kısmı
             browser_meta = get_video_metadata(browser_url, is_mobile=False)
-
-            # Mobil sürüm için dedektifi açıyoruz (True)
+            
+            # Mobil kısmı
             m_url = mobile_url if mobile_url else browser_url
-            mobile_meta = get_video_metadata(m_url, is_mobile=True)
+            mobile_meta = get_video_metadata(m_url, is_mobile=True)    
 
             # Ortak fonksiyonu kullanıyoruz
             caption, markup = prepare_message_content(data, browser_meta, mobile_meta, cid)
