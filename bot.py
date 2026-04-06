@@ -208,6 +208,24 @@ def get_msg(chat_id, key):
     lang = user_prefs.get(chat_id, "TR")
     return LANGUAGES[lang].get(key, key)
 
+def get_original_hd_link(video_url):
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-Requested-With": "XMLHttpRequest",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    }
+    try:
+        # Task Submit
+        res = requests.post("https://www.tikwm.com/api/video/task/submit", data={"url": video_url, "web": "1"}, headers=headers).json()
+        if res.get("code") == 0 and "task_id" in res.get("data", {}):
+            time.sleep(3) # Sunucunun hazırlaması için şart
+            # Task Result
+            res2 = requests.get(f"https://www.tikwm.com/api/video/task/result?task_id={res['data']['task_id']}", headers=headers).json()
+            if res2.get("code") == 0:
+                d = res2.get("data", {}).get("detail", res2.get("data", {}))
+                return d.get("play_url") or d.get("download_url") or d.get("play")
+    except: pass
+    return None
 # --- YARDIMCI FONKSİYONLAR ---
 
 def check_subscription(user_id):
@@ -275,6 +293,7 @@ def get_video_metadata(video_url):
             "quality": quality,
             "fps": f"{fps:.0f}", 
             "bitrate": bitrate_str,
+            "copyright": probe.get('format', {}).get('tags', {}).get('copyright', ''), # MÜHÜR BURADA
             "size_bytes": int(probe['format'].get('size', 0))
         }
     except: return None
@@ -318,6 +337,18 @@ def prepare_message_content(data, browser_meta, mobile_meta, cid):
     def safe(meta, key): return meta.get(key, "?") if meta else "?"
     def size(meta): return format_size(meta.get("size_bytes", 0)) if meta else "?"
 
+    m_fps = safe(mobile_meta, 'fps')
+    m_cp = safe(mobile_meta, 'copyright')
+
+    bypass_tag = " **(60.0fps)**" if m_cp == "kuronaibypass60" else ""
+    
+    # Varsayılan görünüm
+    fps_display = f"{m_fps} FPS"
+    
+    # Eğer mühür tam olarak istediğimiz gibiyse kalın (60.0fps) ekle
+    if m_cp == "kuronaibypass60":
+        fps_display = f"{m_fps} FPS **(60.0fps)**"
+
     video_id = data.get("id")
     creation_date = get_date_from_id(video_id)
     region = data.get("region", "Global").upper()
@@ -333,7 +364,7 @@ def prepare_message_content(data, browser_meta, mobile_meta, cid):
         f"📈 {get_msg(cid, 'engagement')}: `%{eng_rate:.2f}`"
         f"{bot_alert}\n\n"
         f"{get_msg(cid, 'web_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(browser_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(browser_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(browser_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(browser_meta)}`\n\n"
-        f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(mobile_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
+        f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'flow')}     : `{m_fps}` FPS{bypass_tag}\n FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
         f"{get_msg(cid, 'publisher')} `@{data.get('author', {}).get('unique_id')}`"
     )
     
