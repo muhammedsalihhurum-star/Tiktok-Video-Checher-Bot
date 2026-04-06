@@ -209,24 +209,33 @@ def get_msg(chat_id, key):
     return LANGUAGES[lang].get(key, key)
 
 def check_kuronai_bypass(data):
-    """Videonun metadata'sına inip Kuronai mühür kontrolü yapar."""
-    # TikWM'nin müdahale etmediği, metadata'nın kalma ihtimali en yüksek olan ham link
-    original_url = data.get("wmplay") 
+    """TikWM'den gelen tüm olası linklerde mühür arar."""
+    # Kontrol edilecek tüm linkleri bir listeye koyalım
+    urls_to_check = [
+        data.get("wmplay"), 
+        data.get("hdplay"), 
+        data.get("play")
+    ]
     
-    if not original_url: 
-        return False
-        
-    try:
-        # FFMPEG ile orijinal linki tarıyoruz
-        probe = ffmpeg.probe(original_url)
-        tags = probe.get('format', {}).get('tags', {})
-        copyright_tag = tags.get('copyright', '')
-        
-        # Mühür kontrolü (büyük/küçük harf duyarsız)
-        if "kuronaibypass60" in copyright_tag.lower():
-            return True
-    except:
-        pass
+    for url in urls_to_check:
+        if not url: 
+            continue
+            
+        try:
+            probe = ffmpeg.probe(url)
+            tags = probe.get('format', {}).get('tags', {})
+            copyright_tag = tags.get('copyright', '')
+            
+            # Konsolda görmek için debug (Test ederken terminaline bak)
+            print(f"🔍 Taranıyor: {url[:40]}... | Bulunan Mühür: {copyright_tag}")
+            
+            if "kuronaibypass60" in copyright_tag.lower():
+                print("✅ MÜHÜR BULUNDU! 60 FPS ETİKETİ EKLENİYOR.")
+                return True
+        except Exception as e:
+            pass
+            
+    print("❌ Mühür hiçbir linkte bulunamadı.")
     return False
 
 # --- YARDIMCI FONKSİYONLAR ---
