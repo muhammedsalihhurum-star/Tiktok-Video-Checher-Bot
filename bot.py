@@ -208,36 +208,6 @@ def get_msg(chat_id, key):
     lang = user_prefs.get(chat_id, "TR")
     return LANGUAGES[lang].get(key, key)
 
-def check_kuronai_bypass(data):
-    """TikWM'den gelen tüm olası linklerde mühür arar."""
-    # Kontrol edilecek tüm linkleri bir listeye koyalım
-    urls_to_check = [
-        data.get("wmplay"), 
-        data.get("hdplay"), 
-        data.get("play")
-    ]
-    
-    for url in urls_to_check:
-        if not url: 
-            continue
-            
-        try:
-            probe = ffmpeg.probe(url)
-            tags = probe.get('format', {}).get('tags', {})
-            copyright_tag = tags.get('copyright', '')
-            
-            # Konsolda görmek için debug (Test ederken terminaline bak)
-            print(f"🔍 Taranıyor: {url[:40]}... | Bulunan Mühür: {copyright_tag}")
-            
-            if "kuronaibypass60" in copyright_tag.lower():
-                print("✅ MÜHÜR BULUNDU! 60 FPS ETİKETİ EKLENİYOR.")
-                return True
-        except Exception as e:
-            pass
-            
-    print("❌ Mühür hiçbir linkte bulunamadı.")
-    return False
-
 # --- YARDIMCI FONKSİYONLAR ---
 
 def check_subscription(user_id):
@@ -327,8 +297,7 @@ def get_date_from_id(video_id):
         return "-"
 
 # --- ORTAK MESAJ OLUŞTURUCU (Hem ilk analiz hem de yenileme için) ---
-# Fonksiyon tanımına is_bypassed=False parametresi eklendi
-def prepare_message_content(data, browser_meta, mobile_meta, cid, is_bypassed=False):
+def prepare_message_content(data, browser_meta, mobile_meta, cid):
     views = data.get("play_count", 0)
     likes = data.get("digg_count", 0)
     comments = data.get("comment_count", 0) 
@@ -357,12 +326,6 @@ def prepare_message_content(data, browser_meta, mobile_meta, cid, is_bypassed=Fa
     
     mobile_url = data.get("hdplay")
 
-    # --- KURONAI BYPASS KONTROLÜ İLE FPS METNİNİ HAZIRLAMA ---
-    mobile_fps_text = f"`{safe(mobile_meta, 'fps')} FPS`"
-    if is_bypassed:
-        # Normal FPS'in yanına kalın puntoyla 60.00 FPS ekliyoruz
-        mobile_fps_text += " | **60.00 FPS** ✨"
-    
     caption = (
         f"{get_msg(cid, 'desc_header')}\n_“{title}”_\n\n"
         f"{get_msg(cid, 'id_region_header')}\n├ 🔢 ID: `{video_id}`\n├ 🌍 {get_msg(cid, 'region')}: `{region}`\n└ 📅 {get_msg(cid, 'date')}: `{creation_date}`\n\n"
@@ -370,15 +333,15 @@ def prepare_message_content(data, browser_meta, mobile_meta, cid, is_bypassed=Fa
         f"📈 {get_msg(cid, 'engagement')}: `%{eng_rate:.2f}`"
         f"{bot_alert}\n\n"
         f"{get_msg(cid, 'web_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(browser_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(browser_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(browser_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(browser_meta)}`\n\n"
-        f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n"
-        f"├ 🚀 {get_msg(cid, 'Fps')}     : {mobile_fps_text}\n" # <-- DEĞİŞTİRİLEN SATIR BURASI
-        f"└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
+        f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(mobile_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
         f"{get_msg(cid, 'publisher')} `@{data.get('author', {}).get('unique_id')}`"
     )
     
     markup = InlineKeyboardMarkup()
+    # İndirme Butonu
     markup.add(InlineKeyboardButton(f"{get_msg(cid, 'btn_download')} (HD - {size(mobile_meta)})", url=mobile_url))
     
+    # Müzik Butonu Kaldırıldı -> Yerine Yenileme Butonu Eklendi
     refresh_callback = f"refresh_{video_id}"
     profile_url = f"https://www.tiktok.com/@{data.get('author', {}).get('unique_id')}"
     
@@ -494,10 +457,7 @@ def analyze_video(message):
             mobile_meta = get_video_metadata(mobile_url) if (mobile_url and mobile_url != browser_url) else browser_meta
 
             # Ortak fonksiyonu kullanıyoruz
-            is_bypassed = check_kuronai_bypass(data)
-
-# Sonucu mesaj hazırlayıcıya gönderiyoruz
-            caption, markup = prepare_message_content(data, browser_meta, mobile_meta, cid, is_bypassed=is_bypassed)
+            caption, markup = prepare_message_content(data, browser_meta, mobile_meta, cid)
 
             if data.get("cover"):
                 bot.delete_message(message.chat.id, msg.message_id)
