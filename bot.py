@@ -208,6 +208,23 @@ def get_msg(chat_id, key):
     lang = user_prefs.get(chat_id, "TR")
     return LANGUAGES[lang].get(key, key)
 
+# --- YENİ EKLENEN: SADECE 60 FPS YAZISI İÇİN X-RAY FONKSİYONU ---
+def get_deep_metadata_for_bypass(video_url):
+    if not video_url:
+        return ""
+    try:
+        # FFmpeg ile videonun derinliklerine iniyoruz (Senin kodunun mantığı)
+        probe = ffmpeg.probe(video_url)
+        tags = probe.get('format', {}).get('tags', {})
+        copyright_tag = tags.get('copyright', '')
+
+        # Eğer mühür KuronaiBypass60 içeriyorsa kalın yazıyı döndür
+        if "kuronaibypass60" in copyright_tag.lower():
+            return " **(60 FPS)**"
+        return ""
+    except Exception:
+        return ""
+
 # --- YARDIMCI FONKSİYONLAR ---
 
 def check_subscription(user_id):
@@ -296,7 +313,6 @@ def get_date_from_id(video_id):
     except:
         return "-"
 
-# --- ORTAK MESAJ OLUŞTURUCU (Hem ilk analiz hem de yenileme için) ---
 def prepare_message_content(data, browser_meta, mobile_meta, cid):
     views = data.get("play_count", 0)
     likes = data.get("digg_count", 0)
@@ -324,7 +340,14 @@ def prepare_message_content(data, browser_meta, mobile_meta, cid):
     title = data.get("title", "")
     if not title: title = get_msg(cid, "no_desc")
     
+    browser_url = data.get("play")
     mobile_url = data.get("hdplay")
+
+    # --- SENİN X-RAY FONKSİYONUN BURADA DEVREYE GİRİYOR ---
+    # Orijinal meta verilerine hiç dokunmadan, ayrıca X-RAY taraması yapıyoruz
+    web_bypass_yazisi = get_deep_metadata_for_bypass(browser_url)
+    mobil_bypass_yazisi = get_deep_metadata_for_bypass(mobile_url) if (mobile_url and mobile_url != browser_url) else web_bypass_yazisi
+    # --------------------------------------------------------
 
     caption = (
         f"{get_msg(cid, 'desc_header')}\n_“{title}”_\n\n"
@@ -332,16 +355,15 @@ def prepare_message_content(data, browser_meta, mobile_meta, cid):
         f"{get_msg(cid, 'stats_header')}\n`👁 {format_number(views):<6}` {view_bar}\n`♥ {format_number(likes):<6}` {like_bar}\n\n"
         f"📈 {get_msg(cid, 'engagement')}: `%{eng_rate:.2f}`"
         f"{bot_alert}\n\n"
-        f"{get_msg(cid, 'web_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(browser_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(browser_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(browser_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(browser_meta)}`\n\n"
-        f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'Fps')}     : `{safe(mobile_meta, 'fps')} FPS`\n└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
+        # X-RAY'den gelen kalın yazılar FPS satırının sonuna eklendi:
+        f"{get_msg(cid, 'web_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(browser_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(browser_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'flow')}     : `{safe(browser_meta, 'fps')} FPS`{web_bypass_yazisi}\n└ 💾 {get_msg(cid, 'file')}   : `{size(browser_meta)}`\n\n"
+        f"{get_msg(cid, 'mobile_ver')}\n┌ 💎 {get_msg(cid, 'quality')} : `{safe(mobile_meta, 'quality')}`\n├ 📐 {get_msg(cid, 'res')} : `{safe(mobile_meta, 'res')}`\n├ 🚀 {get_msg(cid, 'flow')}     : `{safe(mobile_meta, 'fps')}\n└ 💾 {get_msg(cid, 'file')}   : `{size(mobile_meta)}`\n\n"
         f"{get_msg(cid, 'publisher')} `@{data.get('author', {}).get('unique_id')}`"
     )
     
     markup = InlineKeyboardMarkup()
-    # İndirme Butonu
     markup.add(InlineKeyboardButton(f"{get_msg(cid, 'btn_download')} (HD - {size(mobile_meta)})", url=mobile_url))
     
-    # Müzik Butonu Kaldırıldı -> Yerine Yenileme Butonu Eklendi
     refresh_callback = f"refresh_{video_id}"
     profile_url = f"https://www.tiktok.com/@{data.get('author', {}).get('unique_id')}"
     
