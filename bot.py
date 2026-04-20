@@ -84,7 +84,7 @@ def api_analyze():
         return jsonify({"success": False, "message": str(e)})
 
 # --- 3. TELEGRAM BOT AYARLARI ---
-BOT_TOKEN = '8584063240:AAFNRb73LL-9emyfvVrhkZdjoADOOws0uy4'
+BOT_TOKEN = '8632666716:AAEq5TdsOoXJO3EsicYsCvCnuOlb7RPzC_4'
 bot = telebot.TeleBot(BOT_TOKEN)
 
 TIKWM_API_URL = "https://tikwm.com/api/"
